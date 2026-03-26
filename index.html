@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico">
+  <meta name="theme-color" content="#16213e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Metro Pro">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="メトロノーム Pro">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>メトロノーム Pro</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1a2e;
+  color: #eee;
+  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 30px 16px;
+}
+.container {
+  background: #16213e;
+  border-radius: 24px;
+  padding: 36px 32px;
+  width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  text-align: center;
+}
+h1 { font-size: 1.3rem; letter-spacing: 4px; color: #a0aec0; margin-bottom: 28px; text-transform: uppercase; }
+
+/* Pendulum */
+.pendulum-wrap { height: 120px; display: flex; justify-content: center; align-items: flex-start; margin-bottom: 20px; }
+.pendulum { width: 4px; height: 100px; background: linear-gradient(to bottom, #4a5568, #e2e8f0); border-radius: 2px; transform-origin: top center; position: relative; transition: transform 0.08s linear; }
+.pendulum-bob { width: 22px; height: 22px; background: radial-gradient(circle at 35% 35%, #f6e05e, #d69e2e); border-radius: 50%; position: absolute; bottom: -11px; left: 50%; transform: translateX(-50%); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.pendulum.swing-left  { transform: rotate(-28deg); }
+.pendulum.swing-right { transform: rotate( 28deg); }
+
+/* Measure indicator */
+.measure-indicator {
+  display: flex; justify-content: center; align-items: center; gap: 10px;
+  margin-bottom: 10px; min-height: 28px;
+}
+.measure-label { font-size: 0.8rem; color: #718096; letter-spacing: 1px; }
+.measure-current { font-size: 1rem; font-weight: 700; color: #f6e05e; background: #2d3748; border-radius: 8px; padding: 3px 12px; }
+.measure-timesig { font-size: 0.85rem; color: #63b3ed; }
+
+/* Beat dots */
+.beat-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 24px; min-height: 20px; flex-wrap: wrap; }
+.beat-dot { width: 14px; height: 14px; border-radius: 50%; background: #2d3748; border: 2px solid #4a5568; transition: background 0.05s, box-shadow 0.05s; }
+.beat-dot.accent { border-color: #f6e05e; }
+.beat-dot.active  { background: #63b3ed; box-shadow: 0 0 10px #63b3ed; }
+.beat-dot.accent.active { background: #f6e05e; box-shadow: 0 0 14px #f6e05e; }
+
+/* BPM */
+.bpm-display { font-size: 3.6rem; font-weight: 700; color: #fff; line-height: 1; }
+.bpm-label { font-size: 0.75rem; color: #718096; letter-spacing: 3px; margin-bottom: 14px; margin-top: 2px; }
+input[type=range] {
+  width: 100%; -webkit-appearance: none; height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, #4299e1 0%, #4299e1 var(--val,50%), #2d3748 var(--val,50%), #2d3748 100%);
+  outline: none; margin-bottom: 14px; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #63b3ed; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.bpm-btns { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+.bpm-btn { background: #2d3748; color: #e2e8f0; border: none; border-radius: 8px; padding: 6px 14px; font-size: 0.9rem; cursor: pointer; transition: background 0.2s; }
+.bpm-btn:hover { background: #4a5568; }
+.tempo-name { font-size: 0.8rem; color: #718096; margin-bottom: 20px; letter-spacing: 1px; }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid #2d3748; margin: 20px 0; }
+
+/* ==== SEQUENCE SECTION ==== */
+.section-title {
+  font-size: 0.75rem; letter-spacing: 3px; color: #718096; text-transform: uppercase; margin-bottom: 14px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.seq-mode-toggle {
+  display: flex; background: #2d3748; border-radius: 8px; overflow: hidden; margin-bottom: 16px;
+}
+.seq-mode-btn {
+  flex: 1; padding: 8px; font-size: 0.8rem; border: none; background: transparent;
+  color: #a0aec0; cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
+}
+.seq-mode-btn.active { background: #2b6cb0; color: #fff; }
+
+/* Sequence list */
+.seq-list { margin-bottom: 12px; max-height: 220px; overflow-y: auto; }
+.seq-list::-webkit-scrollbar { width: 4px; }
+.seq-list::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 2px; }
+
+.seq-item {
+  display: flex; align-items: center; gap: 8px;
+  background: #0f3460; border-radius: 10px; padding: 8px 10px;
+  margin-bottom: 6px; border: 2px solid transparent; transition: border 0.15s;
+}
+.seq-item.current-measure { border-color: #f6e05e; }
+.seq-item-num { font-size: 0.7rem; color: #718096; width: 24px; text-align: center; flex-shrink: 0; }
+.seq-item-label { flex: 1; text-align: left; }
+.seq-item-ts { font-size: 1rem; font-weight: 700; color: #63b3ed; }
+.seq-item-name { font-size: 0.7rem; color: #718096; }
+
+/* inline controls in seq-item */
+.seq-item select, .seq-item input[type=number] {
+  background: #1a365d; border: 1px solid #4a5568; color: #e2e8f0; border-radius: 6px;
+  padding: 3px 6px; font-size: 0.85rem; outline: none;
+}
+.seq-item select { cursor: pointer; }
+.seq-item-repeat { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: #a0aec0; }
+.seq-item-repeat input { width: 42px; text-align: center; }
+.del-btn { background: none; border: none; color: #fc8181; font-size: 1rem; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+.del-btn:hover { color: #f56565; }
+
+/* Add measure row */
+.add-row {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 16px;
+}
+.add-row select, .add-row input[type=number] {
+  background: #0f3460; border: 1px solid #4a5568; color: #e2e8f0; border-radius: 8px;
+  padding: 7px 10px; font-size: 0.85rem; outline: none; cursor: pointer;
+}
+.add-row input[type=number] { width: 60px; text-align: center; }
+.add-btn {
+  flex: 1; padding: 8px; background: #276749; color: #9ae6b4; border: none;
+  border-radius: 8px; font-size: 0.85rem; cursor: pointer; letter-spacing: 1px; transition: background 0.2s;
+}
+.add-btn:hover { background: #2f855a; }
+
+/* Loop toggle */
+.loop-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.loop-label { font-size: 0.8rem; color: #a0aec0; }
+.toggle-wrap { display: flex; align-items: center; gap: 8px; }
+.toggle { width: 40px; height: 22px; background: #2d3748; border-radius: 11px; cursor: pointer; position: relative; transition: background 0.2s; border: none; }
+.toggle::after { content: ''; position: absolute; width: 16px; height: 16px; background: #a0aec0; border-radius: 50%; top: 3px; left: 3px; transition: all 0.2s; }
+.toggle.on { background: #2b6cb0; }
+.toggle.on::after { left: 21px; background: #fff; }
+.toggle-val { font-size: 0.75rem; color: #718096; width: 28px; text-align: left; }
+
+/* Buttons */
+#startBtn {
+  width: 100%; padding: 15px; font-size: 1.05rem; font-weight: 700;
+  border: none; border-radius: 14px; cursor: pointer; letter-spacing: 2px; transition: all 0.2s;
+  background: linear-gradient(135deg, #3182ce, #2b6cb0); color: #fff;
+  box-shadow: 0 4px 20px rgba(49,130,206,0.4); margin-bottom: 12px;
+}
+#startBtn:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(49,130,206,0.5); }
+#startBtn.running { background: linear-gradient(135deg, #c53030, #9b2c2c); box-shadow: 0 4px 20px rgba(197,48,48,0.4); }
+#tapBtn {
+  width: 100%; padding: 10px; font-size: 0.88rem;
+  border: 2px solid #4a5568; border-radius: 12px; cursor: pointer;
+  background: transparent; color: #a0aec0; letter-spacing: 2px; transition: all 0.2s;
+}
+#tapBtn:hover { border-color: #63b3ed; color: #63b3ed; }
+#tapBtn:active { background: #2d3748; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🥁 メトロノーム Pro</h1>
+
+  <div class="pendulum-wrap">
+    <div class="pendulum" id="pendulum"><div class="pendulum-bob"></div></div>
+  </div>
+
+  <div class="measure-indicator">
+    <span class="measure-label">小節</span>
+    <span class="measure-current" id="measureDisplay">1</span>
+    <span class="measure-timesig" id="measureTsDisplay">4/4</span>
+  </div>
+
+  <div class="beat-row" id="beatRow"></div>
+
+  <div class="bpm-display" id="bpmDisplay">120</div>
+  <div class="bpm-label">BPM</div>
+  <input type="range" id="bpmSlider" min="10" max="400" value="120">
+  <div class="bpm-btns">
+    <button class="bpm-btn" onclick="changeBpm(-10)">－10</button>
+    <button class="bpm-btn" onclick="changeBpm(-1)">－1</button>
+    <button class="bpm-btn" onclick="changeBpm(1)">＋1</button>
+    <button class="bpm-btn" onclick="changeBpm(10)">＋10</button>
+  </div>
+  <div class="tempo-name" id="tempoName">Moderato</div>
+
+  <hr class="divider">
+
+  <!-- SEQUENCE SECTION -->
+  <div class="section-title">
+    <span>📐 拍子シーケンス</span>
+    <span id="seqStatus" style="font-size:0.7rem;color:#68d391;"></span>
+  </div>
+
+  <!-- Mode toggle: Simple / Sequence -->
+  <div class="seq-mode-toggle">
+    <button class="seq-mode-btn active" id="modeSimple" onclick="setMode('simple')">シンプル</button>
+    <button class="seq-mode-btn" id="modeSeq" onclick="setMode('sequence')">シーケンス</button>
+  </div>
+
+  <!-- Simple mode: single ts buttons -->
+  <div id="simplePanel">
+    <div class="ts-row" style="display:flex;justify-content:center;gap:8px;margin-bottom:16px;" id="tsRow">
+      <button class="ts-btn active" onclick="setSimpleTs(4,4)" id="tsbtn44" style="background:#2b6cb0;color:#fff;border:2px solid #63b3ed;border-radius:10px;padding:6px 14px;font-size:0.85rem;cursor:pointer;">4/4</button>
+      <button class="ts-btn" onclick="setSimpleTs(3,4)" id="tsbtn34" style="background:#2d3748;color:#a0aec0;border:2px solid #4a5568;border-radius:10px;padding:6px 14px;font-size:0.85rem;cursor:pointer;">3/4</button>
+      <button class="ts-btn" onclick="setSimpleTs(6,8)" id="tsbtn68" style="background:#2d3748;color:#a0aec0;border:2px solid #4a5568;border-radius:10px;padding:6px 14px;font-size:0.85rem;cursor:pointer;">6/8</button>
+      <button class="ts-btn" onclick="setSimpleTs(5,4)" id="tsbtn54" style="background:#2d3748;color:#a0aec0;border:2px solid #4a5568;border-radius:10px;padding:6px 14px;font-size:0.85rem;cursor:pointer;">5/4</button>
+      <button class="ts-btn" onclick="setSimpleTs(7,8)" id="tsbtn78" style="background:#2d3748;color:#a0aec0;border:2px solid #4a5568;border-radius:10px;padding:6px 14px;font-size:0.85rem;cursor:pointer;">7/8</button>
+    </div>
+  </div>
+
+  <!-- Sequence mode -->
+  <div id="seqPanel" style="display:none;">
+    <!-- Sequence list -->
+    <div class="seq-list" id="seqList"></div>
+
+    <!-- Add row -->
+    <div class="add-row">
+      <select id="addTs">
+        <option value="2/4">2/4</option>
+        <option value="3/4">3/4</option>
+        <option value="4/4" selected>4/4</option>
+        <option value="5/4">5/4</option>
+        <option value="6/4">6/4</option>
+        <option value="7/4">7/4</option>
+        <option value="3/8">3/8</option>
+        <option value="5/8">5/8</option>
+        <option value="6/8">6/8</option>
+        <option value="7/8">7/8</option>
+        <option value="9/8">9/8</option>
+        <option value="11/8">11/8</option>
+        <option value="12/8">12/8</option>
+      </select>
+      <div style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:#a0aec0;">
+        <span>×</span>
+        <input type="number" id="addRep" value="1" min="1" max="99" style="width:50px;background:#0f3460;border:1px solid #4a5568;color:#e2e8f0;border-radius:8px;padding:7px 6px;text-align:center;font-size:0.85rem;outline:none;">
+        <span>小節</span>
+      </div>
+      <button class="add-btn" onclick="addMeasure()">＋ 追加</button>
+    </div>
+
+    <!-- Loop -->
+    <div class="loop-row">
+      <span class="loop-label">🔁 ループ再生</span>
+      <div class="toggle-wrap">
+        <button class="toggle on" id="loopToggle" onclick="toggleLoop()"></button>
+        <span class="toggle-val" id="loopVal">ON</span>
+      </div>
+    </div>
+
+    <!-- Presets -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:0.72rem;color:#718096;margin-bottom:8px;letter-spacing:1px;">プリセット</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;">
+        <button onclick="loadPreset('odd')" style="background:#2d3748;border:1px solid #4a5568;color:#a0aec0;border-radius:7px;padding:5px 10px;font-size:0.75rem;cursor:pointer;">5+7+4/4</button>
+        <button onclick="loadPreset('jazz')" style="background:#2d3748;border:1px solid #4a5568;color:#a0aec0;border-radius:7px;padding:5px 10px;font-size:0.75rem;cursor:pointer;">4/4 × 3/4</button>
+        <button onclick="loadPreset('prog')" style="background:#2d3748;border:1px solid #4a5568;color:#a0aec0;border-radius:7px;padding:5px 10px;font-size:0.75rem;cursor:pointer;">7/8 × 5/8</button>
+        <button onclick="loadPreset('waltz')" style="background:#2d3748;border:1px solid #4a5568;color:#a0aec0;border-radius:7px;padding:5px 10px;font-size:0.75rem;cursor:pointer;">3/4 × 4</button>
+        <button onclick="clearSeq()" style="background:#2d3748;border:1px solid #fc8181;color:#fc8181;border-radius:7px;padding:5px 10px;font-size:0.75rem;cursor:pointer;">クリア</button>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <button id="startBtn" onclick="toggleMetronome()">▶ スタート</button>
+  <button id="tapBtn" onclick="tapTempo()">タップでテンポ設定</button>
+</div>
+
+<script>
+// ---- State ----
+let bpm = 120;
+let isRunning = false;
+let audioCtx = null;
+let schedulerTimer = null;
+let nextNoteTime = 0.0;
+let currentBeat = 0;       // beat within measure
+let currentMeasureIdx = 0; // index into expanded sequence
+let pendulumDir = 1;
+let tapTimes = [];
+let loopEnabled = true;
+let mode = 'simple'; // 'simple' | 'sequence'
+
+// Simple mode state
+let simpleBeats = 4, simpleDenom = 4;
+
+// Sequence mode: array of {beats, denom} (expanded, one entry per measure repetition)
+let sequence = [{beats:4,denom:4},{beats:4,denom:4},{beats:3,denom:4},{beats:3,denom:4}];
+
+// Raw sequence entries for editing: {beats, denom, reps}
+let seqEntries = [{beats:4,denom:4,reps:2},{beats:3,denom:4,reps:2}];
+
+// UI animation queue
+let animQueue = [];
+let animTimer = null;
+
+// ---- Tempo names ----
+const tempoNames = [
+  [10,19,'Extremely Slow'],[20,39,'Larghissimo'],[40,59,'Largo'],[60,65,'Larghetto'],
+  [66,75,'Adagio'],[76,107,'Andante'],[108,119,'Moderato'],
+  [120,155,'Allegro'],[156,175,'Vivace'],[176,199,'Presto'],[200,300,'Prestissimo'],[301,400,'Hyper Presto']
+];
+function getTempoName(b){ for(let[lo,hi,n] of tempoNames) if(b>=lo&&b<=hi)return n; return ''; }
+
+// ---- BPM ----
+function changeBpm(d){ bpm=Math.min(400,Math.max(10,bpm+d)); updateBpmUI(); }
+document.getElementById('bpmSlider').addEventListener('input',function(){bpm=parseInt(this.value);updateBpmUI();});
+function updateBpmUI(){
+  document.getElementById('bpmDisplay').textContent=bpm;
+  document.getElementById('tempoName').textContent=getTempoName(bpm);
+  const pct=((bpm-10)/390*100).toFixed(1);
+  const sl=document.getElementById('bpmSlider');
+  sl.style.setProperty('--val',pct+'%'); sl.value=bpm;
+}
+
+// ---- Mode ----
+function setMode(m){
+  mode=m;
+  document.getElementById('modeSimple').classList.toggle('active',m==='simple');
+  document.getElementById('modeSeq').classList.toggle('active',m==='sequence');
+  document.getElementById('simplePanel').style.display=m==='simple'?'':'none';
+  document.getElementById('seqPanel').style.display=m==='sequence'?'':'none';
+  resetPlayback();
+  buildBeatDots();
+  updateMeasureDisplay();
+}
+
+// ---- Simple TS ----
+function setSimpleTs(b,d){
+  simpleBeats=b; simpleDenom=d;
+  document.querySelectorAll('.ts-btn').forEach(btn=>{
+    const active=btn.id==='tsbtn'+b+d;
+    btn.style.background=active?'#2b6cb0':'#2d3748';
+    btn.style.color=active?'#fff':'#a0aec0';
+    btn.style.borderColor=active?'#63b3ed':'#4a5568';
+  });
+  if(isRunning){ resetPlayback(); }
+  buildBeatDots(); updateMeasureDisplay();
+}
+
+// ---- Sequence ----
+function expandSequence(){
+  sequence=[];
+  for(let e of seqEntries) for(let i=0;i<e.reps;i++) sequence.push({beats:e.beats,denom:e.denom});
+}
+
+function renderSeqList(){
+  expandSequence();
+  const list=document.getElementById('seqList');
+  list.innerHTML='';
+  if(seqEntries.length===0){
+    list.innerHTML='<div style="color:#718096;font-size:0.8rem;padding:12px;">小節を追加してください</div>';
+    return;
+  }
+  seqEntries.forEach((e,i)=>{
+    const div=document.createElement('div');
+    div.className='seq-item'; div.id='seqentry'+i;
+    // Find if this entry covers currentMeasureIdx
+    let start=0; for(let j=0;j<i;j++) start+=seqEntries[j].reps;
+    if(isRunning && currentMeasureIdx>=start && currentMeasureIdx<start+e.reps) div.classList.add('current-measure');
+    div.innerHTML=`
+      <span class="seq-item-num">${i+1}</span>
+      <div class="seq-item-label">
+        <select onchange="updateEntry(${i},'ts',this.value)" style="background:#1a365d;border:1px solid #4a5568;color:#e2e8f0;border-radius:6px;padding:3px 6px;font-size:0.95rem;outline:none;cursor:pointer;">
+          ${['2/4','3/4','4/4','5/4','6/4','7/4','3/8','5/8','6/8','7/8','9/8','11/8','12/8'].map(t=>
+            `<option value="${t}"${t===e.beats+'/'+e.denom?' selected':''}>${t}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="seq-item-repeat">
+        <span>×</span>
+        <input type="number" value="${e.reps}" min="1" max="99" style="width:42px;background:#1a365d;border:1px solid #4a5568;color:#e2e8f0;border-radius:6px;padding:3px 5px;text-align:center;font-size:0.8rem;outline:none;" onchange="updateEntry(${i},'reps',this.value)">
+        <span>小節</span>
+      </div>
+      <button class="del-btn" onclick="deleteEntry(${i})">✕</button>
+    `;
+    list.appendChild(div);
+  });
+  document.getElementById('seqStatus').textContent=sequence.length+'小節';
+}
+
+function updateEntry(i,field,val){
+  if(field==='ts'){const[b,d]=val.split('/');seqEntries[i].beats=parseInt(b);seqEntries[i].denom=parseInt(d);}
+  if(field==='reps'){seqEntries[i].reps=Math.max(1,parseInt(val)||1);}
+  renderSeqList();
+  if(isRunning) resetPlayback();
+  buildBeatDots(); updateMeasureDisplay();
+}
+
+function deleteEntry(i){
+  seqEntries.splice(i,1); renderSeqList();
+  if(isRunning) resetPlayback();
+  buildBeatDots(); updateMeasureDisplay();
+}
+
+function addMeasure(){
+  const ts=document.getElementById('addTs').value;
+  const reps=Math.max(1,parseInt(document.getElementById('addRep').value)||1);
+  const[b,d]=ts.split('/');
+  seqEntries.push({beats:parseInt(b),denom:parseInt(d),reps});
+  document.getElementById('addRep').value=1;
+  renderSeqList();
+  if(isRunning) resetPlayback();
+}
+
+function clearSeq(){ seqEntries=[]; renderSeqList(); if(isRunning)resetPlayback(); buildBeatDots(); updateMeasureDisplay(); }
+
+function loadPreset(name){
+  const presets={
+    odd:[{beats:5,denom:4,reps:1},{beats:7,denom:8,reps:1},{beats:4,denom:4,reps:1}],
+    jazz:[{beats:4,denom:4,reps:2},{beats:3,denom:4,reps:2}],
+    prog:[{beats:7,denom:8,reps:3},{beats:5,denom:8,reps:1}],
+    waltz:[{beats:3,denom:4,reps:4}]
+  };
+  seqEntries=presets[name].map(e=>({...e}));
+  renderSeqList();
+  if(isRunning) resetPlayback();
+  buildBeatDots(); updateMeasureDisplay();
+}
+
+function toggleLoop(){
+  loopEnabled=!loopEnabled;
+  document.getElementById('loopToggle').classList.toggle('on',loopEnabled);
+  document.getElementById('loopVal').textContent=loopEnabled?'ON':'OFF';
+}
+
+// ---- Current measure info ----
+function getCurrentTs(){
+  if(mode==='simple') return {beats:simpleBeats,denom:simpleDenom};
+  expandSequence();
+  if(sequence.length===0) return {beats:4,denom:4};
+  const idx=currentMeasureIdx % sequence.length;
+  return sequence[idx];
+}
+
+// ---- Beat dots ----
+function buildBeatDots(){
+  const ts=getCurrentTs();
+  const row=document.getElementById('beatRow');
+  row.innerHTML='';
+  for(let i=0;i<ts.beats;i++){
+    const d=document.createElement('div');
+    d.className='beat-dot'+(i===0?' accent':'');
+    d.id='dot'+i; row.appendChild(d);
+  }
+}
+
+function updateMeasureDisplay(){
+  const ts=getCurrentTs();
+  const mIdx=mode==='sequence'?currentMeasureIdx:0;
+  const mTotal=mode==='sequence'?(sequence.length||1):1;
+  document.getElementById('measureDisplay').textContent=(mIdx%mTotal)+1+' / '+mTotal;
+  document.getElementById('measureTsDisplay').textContent=ts.beats+'/'+ts.denom;
+}
+
+// ---- Web Audio Scheduler ----
+const SCHEDULE_AHEAD = 0.1;
+const LOOK_AHEAD = 25.0;
+
+function scheduleNote(time, beat, measureIdx, ts){
+  const accent = beat === 0;
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.frequency.value = accent ? 1800 : 900;
+  gain.gain.setValueAtTime(accent ? 0.85 : 0.45, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+  osc.start(time); osc.stop(time + 0.06);
+
+  // Queue visual update
+  const delay = Math.max(0, (time - audioCtx.currentTime) * 1000);
+  setTimeout(()=> animateBeat(beat, measureIdx, ts), delay);
+}
+
+function animateBeat(beat, measureIdx, ts){
+  if(!isRunning) return;
+  // Rebuild dots if ts changed
+  const curTs = getCurrentTs();
+  const dotCount = document.querySelectorAll('.beat-dot').length;
+  if(dotCount !== ts.beats){
+    buildBeatDots();
+  }
+  document.querySelectorAll('.beat-dot').forEach(d=>d.classList.remove('active'));
+  const dot=document.getElementById('dot'+beat);
+  if(dot) dot.classList.add('active');
+
+  // Pendulum
+  const pend=document.getElementById('pendulum');
+  pend.classList.remove('swing-left','swing-right');
+  void pend.offsetWidth;
+  pend.classList.add(pendulumDir>0?'swing-right':'swing-left');
+  if(beat===ts.beats-1) pendulumDir*=-1;
+
+  // Measure display
+  document.getElementById('measureDisplay').textContent=(measureIdx % Math.max(1,sequence.length||1))+1+' / '+Math.max(1,sequence.length||1);
+  document.getElementById('measureTsDisplay').textContent=ts.beats+'/'+ts.denom;
+
+  // Highlight seq entry
+  if(mode==='sequence'){
+    document.querySelectorAll('.seq-item').forEach(el=>el.classList.remove('current-measure'));
+    let start=0,entryIdx=0;
+    const mi=measureIdx%(sequence.length||1);
+    for(let j=0;j<seqEntries.length;j++){
+      if(mi>=start && mi<start+seqEntries[j].reps){entryIdx=j;break;}
+      start+=seqEntries[j].reps;
+    }
+    const el=document.getElementById('seqentry'+entryIdx);
+    if(el) el.classList.add('current-measure');
+  }
+}
+
+function scheduler(){
+  if(!isRunning) return;
+  while(nextNoteTime < audioCtx.currentTime + SCHEDULE_AHEAD){
+    const ts = mode==='simple'
+      ? {beats:simpleBeats,denom:simpleDenom}
+      : (sequence.length>0 ? sequence[currentMeasureIdx % sequence.length] : {beats:4,denom:4});
+
+    scheduleNote(nextNoteTime, currentBeat, currentMeasureIdx, ts);
+
+    // Advance
+    const secondsPerBeat = 60.0 / bpm;
+    // For 8th-note denominators, each beat = half a quarter note
+    const mul = (ts.denom===8) ? 0.5 : 1.0;
+    nextNoteTime += secondsPerBeat * mul;
+
+    currentBeat++;
+    if(currentBeat >= ts.beats){
+      currentBeat=0;
+      currentMeasureIdx++;
+      if(mode==='sequence' && sequence.length>0 && currentMeasureIdx>=sequence.length){
+        if(loopEnabled){ currentMeasureIdx=0; }
+        else { stopMetronome(); return; }
+      }
+    }
+  }
+  schedulerTimer = setTimeout(scheduler, LOOK_AHEAD);
+}
+
+function resetPlayback(){
+  currentBeat=0; currentMeasureIdx=0; pendulumDir=1;
+  if(mode==='sequence') expandSequence();
+  buildBeatDots(); updateMeasureDisplay();
+}
+
+function stopMetronome(){
+  isRunning=false;
+  clearTimeout(schedulerTimer);
+  const btn=document.getElementById('startBtn');
+  btn.textContent='▶ スタート'; btn.classList.remove('running');
+  document.querySelectorAll('.beat-dot').forEach(d=>d.classList.remove('active'));
+  document.getElementById('pendulum').classList.remove('swing-left','swing-right');
+  document.querySelectorAll('.seq-item').forEach(el=>el.classList.remove('current-measure'));
+  resetPlayback();
+}
+
+function toggleMetronome(){
+  if(isRunning){ stopMetronome(); return; }
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  if(mode==='sequence') expandSequence();
+  if(mode==='sequence' && sequence.length===0){ alert('小節を追加してください'); return; }
+  isRunning=true;
+  currentBeat=0; currentMeasureIdx=0; pendulumDir=1;
+  nextNoteTime=audioCtx.currentTime+0.05;
+  const btn=document.getElementById('startBtn');
+  btn.textContent='⏹ ストップ'; btn.classList.add('running');
+  buildBeatDots(); updateMeasureDisplay();
+  scheduler();
+}
+
+// ---- Tap tempo ----
+function tapTempo(){
+  const now=Date.now(); tapTimes.push(now);
+  if(tapTimes.length>8) tapTimes.shift();
+  if(tapTimes.length>=2){
+    const diffs=[]; for(let i=1;i<tapTimes.length;i++) diffs.push(tapTimes[i]-tapTimes[i-1]);
+    bpm=Math.min(400,Math.max(10,Math.round(60000/(diffs.reduce((a,b)=>a+b,0)/diffs.length))));
+    updateBpmUI();
+  }
+  clearTimeout(window._tapClear);
+  window._tapClear=setTimeout(()=>tapTimes=[],3000);
+}
+
+// ---- Init ----
+renderSeqList();
+buildBeatDots();
+updateBpmUI();
+updateMeasureDisplay();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW error:', err));
+  });
+}
+</script>
+</body>
+</html>
