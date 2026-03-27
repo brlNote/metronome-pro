@@ -263,6 +263,46 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px;
     </div>
   </div>
 
+
+  <hr class="divider">
+  <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
+    <span>📈 テンポ自動変化</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="atToggleLabel" style="font-size:0.75rem;color:#718096;">OFF</span>
+      <button id="atToggleBtn" onclick="toggleAutoTempo()"
+        style="width:40px;height:22px;background:#2d3748;border-radius:11px;border:none;cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0;"></button>
+    </div>
+  </div>
+  <div id="autoTempoPanel" style="display:none;margin-bottom:8px;">
+    <div class="seq-mode-toggle" style="margin-bottom:14px;">
+      <button class="seq-mode-btn active" id="atModeLoop" onclick="setAtMode('loop')">ループごと</button>
+      <button class="seq-mode-btn" id="atModeTime" onclick="setAtMode('time')">秒ごと</button>
+    </div>
+    <div id="atLoopPanel" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <span style="font-size:0.85rem;color:#a0aec0;">1ループごとに</span>
+      <input type="number" id="atLoopAmt" value="5"
+        style="width:58px;background:#0f3460;border:1px solid #4a5568;color:#e2e8f0;border-radius:8px;padding:6px;text-align:center;font-size:1rem;outline:none;">
+      <span style="font-size:0.85rem;color:#a0aec0;">BPM変化</span>
+    </div>
+    <div id="atTimePanel" style="display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <input type="number" id="atTimeInt" value="30" min="1" max="999"
+        style="width:58px;background:#0f3460;border:1px solid #4a5568;color:#e2e8f0;border-radius:8px;padding:6px;text-align:center;font-size:1rem;outline:none;">
+      <span style="font-size:0.85rem;color:#a0aec0;">秒ごとに</span>
+      <input type="number" id="atTimeAmt" value="5"
+        style="width:58px;background:#0f3460;border:1px solid #4a5568;color:#e2e8f0;border-radius:8px;padding:6px;text-align:center;font-size:1rem;outline:none;">
+      <span style="font-size:0.85rem;color:#a0aec0;">BPM変化</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+      <span style="font-size:0.8rem;color:#718096;">範囲:</span>
+      <input type="number" id="atMin" value="60"
+        style="width:58px;background:#0f3460;border:1px solid #4a5568;color:#e2e8f0;border-radius:8px;padding:5px;text-align:center;font-size:0.9rem;outline:none;">
+      <span style="font-size:0.8rem;color:#718096;">〜</span>
+      <input type="number" id="atMax" value="200"
+        style="width:58px;background:#0f3460;border:1px solid #4a5568;color:#e2e8f0;border-radius:8px;padding:5px;text-align:center;font-size:0.9rem;outline:none;">
+      <span style="font-size:0.8rem;color:#718096;">BPM</span>
+    </div>
+    <div id="atStatus" style="font-size:0.75rem;color:#68d391;text-align:center;min-height:18px;"></div>
+  </div>
   <hr class="divider">
   <button id="startBtn" onclick="toggleMetronome()">▶ スタート</button>
   <button id="tapBtn" onclick="tapTempo()">タップでテンポ設定</button>
@@ -270,6 +310,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px;
 
 <script>
 // ---- State ----
+// ---- Auto Tempo State ----
+let atEnabled = false;
+let atMode = 'loop';
+let atTimeTimer = null;
+let atLoopCount = 0;
 let bpm = 120;
 let isRunning = false;
 let audioCtx = null;
@@ -531,7 +576,11 @@ function scheduler(){
       currentBeat=0;
       currentMeasureIdx++;
       if(mode==='sequence' && sequence.length>0 && currentMeasureIdx>=sequence.length){
-        if(loopEnabled){ currentMeasureIdx=0; }
+        if(loopEnabled){
+        currentMeasureIdx=0;
+        atLoopCount++;
+        if(atEnabled && atMode==='loop') applyAtBpm();
+      }
         else { stopMetronome(); return; }
       }
     }
@@ -554,6 +603,8 @@ function stopMetronome(){
   document.getElementById('pendulum').classList.remove('swing-left','swing-right');
   document.querySelectorAll('.seq-item').forEach(el=>el.classList.remove('current-measure'));
   resetPlayback();
+  clearAtTimer();
+  if(document.getElementById('atStatus')) document.getElementById('atStatus').textContent='';
 }
 
 function toggleMetronome(){
@@ -563,7 +614,8 @@ function toggleMetronome(){
   if(mode==='sequence') expandSequence();
   if(mode==='sequence' && sequence.length===0){ alert('小節を追加してください'); return; }
   isRunning=true;
-  currentBeat=0; currentMeasureIdx=0; pendulumDir=1;
+  currentBeat=0; currentMeasureIdx=0; pendulumDir=1; atLoopCount=0;
+  if(atEnabled && atMode==='time') startAtTimer();
   nextNoteTime=audioCtx.currentTime+0.05;
   const btn=document.getElementById('startBtn');
   btn.textContent='⏹ ストップ'; btn.classList.add('running');
@@ -584,19 +636,63 @@ function tapTempo(){
   window._tapClear=setTimeout(()=>tapTimes=[],3000);
 }
 
+
+// ---- Auto Tempo Functions ----
+function toggleAutoTempo(){
+  atEnabled=!atEnabled;
+  const btn=document.getElementById('atToggleBtn');
+  const lbl=document.getElementById('atToggleLabel');
+  btn.style.background=atEnabled?'#2b6cb0':'#2d3748';
+  lbl.textContent=atEnabled?'ON':'OFF';
+  lbl.style.color=atEnabled?'#63b3ed':'#718096';
+  document.getElementById('autoTempoPanel').style.display=atEnabled?'block':'none';
+  if(!atEnabled){ clearAtTimer(); document.getElementById('atStatus').textContent=''; }
+}
+
+function setAtMode(m){
+  atMode=m;
+  document.getElementById('atModeLoop').classList.toggle('active',m==='loop');
+  document.getElementById('atModeTime').classList.toggle('active',m==='time');
+  document.getElementById('atLoopPanel').style.display=m==='loop'?'flex':'none';
+  document.getElementById('atTimePanel').style.display=m==='time'?'flex':'none';
+  clearAtTimer();
+  if(isRunning && m==='time') startAtTimer();
+}
+
+function applyAtBpm(){
+  const amt=parseInt(document.getElementById(atMode==='loop'?'atLoopAmt':'atTimeAmt').value)||0;
+  const mn=parseInt(document.getElementById('atMin').value)||10;
+  const mx=parseInt(document.getElementById('atMax').value)||400;
+  const nb=Math.min(mx,Math.max(mn,bpm+amt));
+  const st=document.getElementById('atStatus');
+  if(nb===bpm){ st.textContent=amt>=0?'🏁 最大 '+mx+' BPM 到達':'🏁 最小 '+mn+' BPM 到達'; return; }
+  bpm=nb; updateBpmUI();
+  st.textContent=(amt>=0?'+':'')+amt+' BPM → 現在 '+bpm+' BPM';
+}
+
+function startAtTimer(){
+  clearAtTimer();
+  const sec=(parseInt(document.getElementById('atTimeInt').value)||30)*1000;
+  document.getElementById('atStatus').textContent='⏱ '+(sec/1000)+'秒ごとに変化中...';
+  atTimeTimer=setInterval(()=>{ applyAtBpm(); },sec);
+}
+
+function clearAtTimer(){
+  if(atTimeTimer){clearInterval(atTimeTimer);atTimeTimer=null;}
+}
+
 // ---- Init ----
 renderSeqList();
 buildBeatDots();
 updateBpmUI();
 updateMeasureDisplay();
 </script>
-
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js')
-      .then(reg => console.log('SW registered:', reg.scope))
-      .catch(err => console.warn('SW error:', err));
+      .then(r => console.log('SW:', r.scope))
+      .catch(e => console.warn('SW:', e));
   });
 }
 </script>
